@@ -481,24 +481,56 @@ class rvm(object):
 #***************
 if (__name__ == '__main__'):
 	import matplotlib.pyplot as pl
-	N = 10
-	M = 11
-	XStenflo = np.asarray([-2.83000,-1.18000,0.870000,1.90000,3.96000,5.01000,6.25000,8.10000,9.98000,12.1200]).T
-	Outputs = np.asarray([0.0211433,0.0167467,0.00938793,0.0183543,-0.00285475,-0.000381000,0.00374350,0.000126900,0.0121750,0.0268133]).T
+	
+	N = 100
+	noise_std = 0.05
 
-	# Define the basis functions. Gaussians of width 3.4 evaluated at the observed points
-	basisWidth = 3.4
-	C = XStenflo[:,np.newaxis]
-	Basis = np.exp(-(XStenflo-C)**2 / basisWidth**2)
-	Basis = np.hstack([Basis, np.ones((1,N)).T])
+	x = np.linspace(0, 3, N)
+	y_line = 1.0 - 0.3 * np.exp(-(x-1.0)**2 / 0.2**2)
+	y_fringes = 0.01 * np.sin(10.2 * x)
+	y = y_line + y_fringes + noise_std * np.random.randn(N)
+	
+
+	# Define the basis functions
+
+	# Sines and cosines at different frequencies	
+	freq = np.arange(40)*0.5 + 1.0
+	for i in range(40):
+		tmp = np.sin(freq[i] * x)[:,None]
+		if (i == 0):
+			Basis = tmp
+		else:
+			Basis = np.hstack([Basis, tmp])
+
+		tmp = np.cos(freq[i] * x)[:,None]
+		Basis = np.hstack([Basis, tmp])
+
+	Basis_fringe = np.copy(Basis)
+	n_fringes = Basis_fringe.shape[1]
+
+	# Gaussians with different widths centered at all points
+	widths = np.array([0.1,0.15,0.2,0.25,0.3])
+	for i in range(len(widths)):
+		tmp = np.exp(-(x - x[:,None])**2 / widths[i])
+		Basis = np.hstack([Basis, tmp])
+
+	# A continuum
+	Basis = np.hstack([Basis, np.ones(N)[:,None]])
 
 	# Instantitate the RVM object and train it
-	p = rvm(Basis, Outputs, noise=0.018)
+	p = rvm(Basis, y, noise=noise_std)
 	p.iterateUntilConvergence()
 
+	# Compute total fits, fringes and line
+	fit = Basis @ p.wInferred
+	fit_fringes = Basis_fringe @ p.wInferred[0:n_fringes]
+	fit_line = fit - fit_fringes
+
 	# Do some plots
-	f = pl.figure(num=0)
-	ax = f.add_subplot(1,1,1)
-	ax.plot(XStenflo, Outputs, 'ro')
-	ax.plot(XStenflo, np.dot(Basis, p.wInferred))
+	f, ax = pl.subplots()	
+	ax.plot(x, y, 'k.')
+	ax.plot(x, fit, label='Fit')
+	ax.plot(x, fit_fringes, label='Fringes')
+	ax.plot(x, fit_line, label='Line')
+	ax.legend()
 	pl.show()
